@@ -1,9 +1,6 @@
 /*
- MQTT <-> network
+ MQTT5 <-> network
  */
-import status from '@/services/api/status';
-import keepalive from '@/services/api/keepalive';
-// import CookieUtils from '@/lib/cookie-utils';
 import { v4 } from 'uuid';
 import websocket from 'websocket-stream';
 import mqttCon from 'mqtt-connection';
@@ -12,7 +9,6 @@ const clientEvents = new events.EventEmitter();
 
 const KEEP_ALIVE_PING_TIME = 15 * 60 * 1000;
 // eslint-disable-next-line no-unused-vars
-let serverTimeOffset = 0;
 let timeoutTime = 5000;
 let lastUserAction = 0;
 let httpKeepAliveTimer;
@@ -62,7 +58,6 @@ const Connector = function (options) {
     let onLoggedOut = null;
     // Other local variables
     let currentMessageId = 0;
-    const messagesInUse = [];
     let client = null;
     let checkLoginTimerId = null;
     // let closed = true;
@@ -219,7 +214,6 @@ const Connector = function (options) {
                     client.subscribe(packet);
                 }
             } else {
-                // TODO consider validation of subscriptions
                 log('connack', packet);
                 log('Already subscribed');
             }
@@ -302,7 +296,7 @@ const Connector = function (options) {
 
     const doKeepAlive = function () {
         if (loggedIn && Date.now() - lastUserAction < KEEP_ALIVE_PING_TIME * 3) {
-            const t0 = Date.now();
+            // const t0 = Date.now();
             options.keep_alive_func
                 .then((data) => {
                     // NTP offset calculation
