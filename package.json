@@ -1,0 +1,49 @@
+{
+  "name": "mqtt5-web-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node src/connector.js",
+    "serve": "cross-var node node_modules/nodemon/bin/nodemon.js",
+    "test": "mocha test/ --exit --bail"
+  },
+  "main": "src/index.js",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "base64-arraybuffer": "^1.0.2",
+    "core-js": "^3.37.1",
+    "dotenv": "^16.4.5",
+    "mqtt-connection": "^4.1.0",
+    "node-core-lib": "^0.11.11",
+    "url-pattern": "^1.0.3",
+    "uuid": "^10.0.0",
+    "websocket-stream": "^5.5.2"
+  },
+  "devDependencies": {
+    "aedes": "^0.51.2",
+    "cross-env": "^7.0.3",
+    "cross-var": "^1.1.0",
+    "mocha": "^10.5.1",
+    "nodemon": "^3.1.4",
+    "webpack": "^4.44.1",
+    "webpack-cli": "^3.3.12"
+  },
+  "eslintConfig": {
+    "root": true,
+    "env": {
+      "node": true
+    },
+    "extends": [],
+    "parserOptions": {
+      "parser": "babel-eslint",
+      "ecmaVersion": 2017
+    },
+    "rules": {
+      "no-console": "off",
+      "semi": [
+        2,
+        "always"
+      ]
+    }
+  }
+}
