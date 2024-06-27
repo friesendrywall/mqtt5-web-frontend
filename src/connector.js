@@ -297,7 +297,7 @@ const Connector = function (options) {
     const doKeepAlive = function () {
         if (loggedIn && Date.now() - lastUserAction < KEEP_ALIVE_PING_TIME * 3) {
             // const t0 = Date.now();
-            options.keep_alive_func
+            options.keep_alive_func()
                 .then((data) => {
                     // NTP offset calculation
                     // const t3 = Date.now();
@@ -334,7 +334,7 @@ const Connector = function (options) {
     }
 
     const checkLogin = function () {
-        options.get_status_func
+        options.get_status_func()
             .then(({ data, version }) => {
                 if (onLogin) {
                     onLogin(data, version);
