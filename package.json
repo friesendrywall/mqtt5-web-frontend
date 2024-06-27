@@ -7,7 +7,7 @@
     "serve": "cross-var node node_modules/nodemon/bin/nodemon.js",
     "test": "mocha test/ --exit --bail"
   },
-  "main": "src/index.js",
+  "main": "src/connector.js",
   "dependencies": {
     "axios": "^1.7.2",
     "base64-arraybuffer": "^1.0.2",
