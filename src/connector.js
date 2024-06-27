@@ -427,6 +427,15 @@ const Connector = function (options) {
     };
 
     /**
+     * 
+     * @param {string} topic
+     * @returns {boolean}
+     */
+    const isSubscribed = function (topic) {
+        return subscriptions.findIndex(e => e.topic === topic) !== -1;
+    };
+
+    /**
      *
      * @param {string|string[]} topic
      * @returns {Promise<{subscribed: boolean, reason: string}|{subscribed: boolean, reason: any}|boolean>}
@@ -577,6 +586,7 @@ const Connector = function (options) {
         publish,
         subscribe,
         unSubscribe,
+        isSubscribed,
         on
     };
 };
