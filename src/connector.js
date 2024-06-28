@@ -152,10 +152,14 @@ const Connector = function (options) {
             log('MQTT closed:' + reason);
             clearTimeout(httpKeepAliveTimer);
             clearTimeout(mqttKeepAliveTimer);
+
             if (onConnect) {
                 onConnect(false);
             }
-            setTimeout(checkLogin, 5000);
+            if (checkLoginTimerId !== null) {
+                clearTimeout(checkLoginTimerId);
+            }
+            checkLoginTimerId = setTimeout(checkLogin, 5000);
             timeoutTime = 5000;
             client.destroy();
             client = null;
@@ -427,7 +431,7 @@ const Connector = function (options) {
     };
 
     /**
-     * 
+     *
      * @param {string} topic
      * @returns {boolean}
      */
