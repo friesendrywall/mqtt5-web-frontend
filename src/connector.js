@@ -75,7 +75,7 @@ const Connector = function (options) {
         !options.keep_alive_func ||
         !options.get_status_func ||
         !options.check_cookie_func) {
-        log('Required functions missing');
+        throw('Required functions missing');
     }
 
     const getMqttError = function (err) {
@@ -171,6 +171,9 @@ const Connector = function (options) {
         };
 
         const mqttKeepAlive = function () {
+            if (closed) {
+                return;
+            }
             client.pingreq(null, function () {
                 mqttKeepAliveTimer = setTimeout(mqttKeepAlive, 30000);
             });
@@ -196,6 +199,7 @@ const Connector = function (options) {
         client.on('connack', function (packet) {
             if (packet.reasonCode !== 0) {
                 closeConnection('Unable to login to mqtt server');
+                return;
             }
             if (!packet.sessionPresent) {
                 if (subscriptions.length > 0) {
@@ -229,6 +233,9 @@ const Connector = function (options) {
         });
 
         client.on('publish', function (packet) {
+            if (closed) {
+                return;
+            }
             if (packet.qos > 0) {
                 client.puback({
                     messageId: packet.messageId
@@ -241,6 +248,9 @@ const Connector = function (options) {
         });
 
         client.on('suback', function (packet) {
+            if (closed) {
+                return;
+            }
             if (packet.granted.find((element) => element > 1)) {
                 for (let i = 0; i < subscriptions.length; i++) {
                     if (subscriptions[i].messageId === packet.messageId) {
@@ -273,16 +283,25 @@ const Connector = function (options) {
         });
 
         client.on('unsuback', function (packet) {
+            if (closed) {
+                return;
+            }
             clientEvents.emit(`unsuback:${packet.messageId}`, EVENT.VALID, packet);
             delete pendingEvents[`unsuback:${packet.messageId}`];
         });
 
         client.on('puback', function (packet) {
+            if (closed) {
+                return;
+            }
             clientEvents.emit(`puback:${packet.messageId}`, EVENT.VALID, packet);
             delete pendingEvents[`puback:${packet.messageId}`];
         });
 
         client.on('pingresp', function () {
+            if (closed) {
+                return;
+            }
             updateConnTimer(60000);
         });
 
