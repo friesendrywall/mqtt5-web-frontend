@@ -60,6 +60,7 @@ const Connector = function (options) {
     let currentMessageId = 0;
     let client = null;
     let checkLoginTimerId = null;
+    let currentSession = null;
     // let closed = true;
 
     const subscriptions = [];
@@ -314,7 +315,14 @@ const Connector = function (options) {
             log('MQTT connection error', error);
         });
 
+        const logoutSession = function () {
+            closeConnection('Logged out');
+        }
+
         doKeepAlive(); // Retrieve initial clock offset, and start timer
+        return {
+            logoutSession
+        }
     };
 
     const doKeepAlive = function () {
@@ -356,6 +364,13 @@ const Connector = function (options) {
         checkLogin();
     }
 
+    const logout = function () {
+        if (currentSession != null) {
+            currentSession.logoutSession();
+            currentSession = null;
+        }
+    }
+
     const checkLogin = function () {
         options.get_status_func()
             .then(({ data, version }) => {
@@ -363,7 +378,7 @@ const Connector = function (options) {
                     onLogin(data, version);
                 }
                 loggedIn = true;
-                openWebSocket(data.jwt, data.user_id);
+                currentSession = openWebSocket(data.jwt, data.user_id);
                 lastUserAction = Date.now();
             })
             .catch((error) => {
@@ -393,6 +408,10 @@ const Connector = function (options) {
             if (!options.check_cookie_func()) {
                 if (checkLoginTimerId !== null) {
                     clearTimeout(checkLoginTimerId);
+                }
+                if (currentSession != null) {
+                    currentSession.logoutSession();
+                    currentSession = null;
                 }
                 loggedIn = false;
                 if (onLoggedOut) {
