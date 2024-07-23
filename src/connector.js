@@ -4,7 +4,8 @@
 import { v4 } from 'uuid';
 import websocket from 'websocket-stream';
 import mqttCon from 'mqtt-connection';
-const events = require('events');
+import events from 'events';
+
 const clientEvents = new events.EventEmitter();
 
 const KEEP_ALIVE_PING_TIME = 15 * 60 * 1000;
@@ -317,12 +318,12 @@ const Connector = function (options) {
 
         const logoutSession = function () {
             closeConnection('Logged out');
-        }
+        };
 
         doKeepAlive(); // Retrieve initial clock offset, and start timer
         return {
             logoutSession
-        }
+        };
     };
 
     const doKeepAlive = function () {
@@ -362,14 +363,14 @@ const Connector = function (options) {
      */
     const login = function () {
         checkLogin();
-    }
+    };
 
     const logout = function () {
         if (currentSession != null) {
             currentSession.logoutSession();
             currentSession = null;
         }
-    }
+    };
 
     const checkLogin = function () {
         options.get_status_func()
@@ -625,6 +626,7 @@ const Connector = function (options) {
 
     return {
         login,
+        logout,
         publish,
         subscribe,
         unSubscribe,
