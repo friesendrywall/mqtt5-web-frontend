@@ -8,11 +8,10 @@ import events from 'events';
 
 const clientEvents = new events.EventEmitter();
 
-const KEEP_ALIVE_PING_TIME = 15 * 60 * 1000;
+const DEFAULT_KEEP_ALIVE_PING_TIME = 15 * 60 * 1000;
 // eslint-disable-next-line no-unused-vars
 let timeoutTime = 5000;
 let lastUserAction = 0;
-let httpKeepAliveTimer;
 const clientId = 'WEB-' + v4();
 const EVENT = {
     TIMEOUT: 'Timeout',
@@ -21,8 +20,8 @@ const EVENT = {
 };
 
 // Shim for mqtt-connection
-if (!global.setImmediate) {
-    global.setImmediate = function (func) {
+if (!window.setImmediate) {
+    window.setImmediate = function (func) {
         setTimeout(func, 0);
     };
 }
@@ -31,10 +30,7 @@ if (!global.setImmediate) {
  * @typedef connector_opt_t
  * @type {object}
  * @property {function | undefined} log_func
- * @property {string | undefined } cookie_name
- * @property {function} keep_alive_func
- * @property {function} get_status_func
- * @property {function} check_cookie_func
+ * @property {string|undefined} wss_url
  *
  */
 
@@ -46,8 +42,9 @@ if (!global.setImmediate) {
  *  publish: ((function(string, *): Promise<{reason: number, error: string, sent: boolean}|{reason: string, sent: boolean}|
  *      {reason: string, data: object, reasonCode: *, error: (string|string[]), sent: boolean}>)|*),
  *  unSubscribe: ((function((string|string[])): Promise<{subscribed: boolean, reason: string}|{subscribed: boolean, reason: *}|boolean>)|*),
- *  login: login,
- *  on: on}}
+ *  open: function(jwt, user_id),
+ *  close: function(void),
+ *  on: function('publish'|'connect'|'login'|'logged-out', function())}}
  * @constructor
  */
 const Connector = function (options) {
@@ -55,14 +52,11 @@ const Connector = function (options) {
     let loggedIn = false;
     let onPublish = null;
     let onConnect = null;
-    let onLogin = null;
     let onLoggedOut = null;
     // Other local variables
     let currentMessageId = 0;
     let client = null;
-    let checkLoginTimerId = null;
     let currentSession = null;
-    // let closed = true;
 
     const subscriptions = [];
     const pendingEvents = [];
@@ -71,14 +65,9 @@ const Connector = function (options) {
         if (options && options.log_func) {
             options.log_func.apply(this, arg);
         }
-    }
+    };
 
-    if (!options ||
-        !options.keep_alive_func ||
-        !options.get_status_func ||
-        !options.check_cookie_func) {
-        throw('Required functions missing');
-    }
+    const mqtt_url = options && options.wss_url ? options.wss_url : '/api/wss/mqtt';
 
     const getMqttError = function (err) {
         switch (err) {
@@ -127,14 +116,13 @@ const Connector = function (options) {
         const url =
             window.location.protocol.replace('http', 'ws') +
             '//' +
-            window.location.host +
-            '/api/wss/mqtt';
+            window.location.host + mqtt_url;
         const ws = websocket(url);
         client = mqttCon(ws, {
             protocolVersion: 5
         });
 
-        const closeConnection = function (reason) {
+        const closeConnection = function (reason, restart = true) {
             if (closed) {
                 return;
             }
@@ -152,16 +140,11 @@ const Connector = function (options) {
                 // No pending errors
             }
             log('MQTT closed:' + reason);
-            clearTimeout(httpKeepAliveTimer);
             clearTimeout(mqttKeepAliveTimer);
 
             if (onConnect) {
                 onConnect(false);
             }
-            if (checkLoginTimerId !== null) {
-                clearTimeout(checkLoginTimerId);
-            }
-            checkLoginTimerId = setTimeout(checkLogin, 5000);
             timeoutTime = 5000;
             client.destroy();
             client = null;
@@ -317,117 +300,43 @@ const Connector = function (options) {
         });
 
         const logoutSession = function () {
-            closeConnection('Logged out');
+            closeConnection('Logged out', false);
         };
 
-        doKeepAlive(); // Retrieve initial clock offset, and start timer
         return {
             logoutSession
         };
     };
 
-    const doKeepAlive = function () {
-        if (loggedIn && Date.now() - lastUserAction < KEEP_ALIVE_PING_TIME * 3) {
-            // const t0 = Date.now();
-            options.keep_alive_func()
-                .then((data) => {
-                    // NTP offset calculation
-                    // const t3 = Date.now();
-                    // serverTimeOffset = (data.t1 - t0 + (data.t2 - t3)) / 2;
-                })
-                .catch((error) => {
-                    if (
-                        error.response &&
-                        error.response.status &&
-                        error.response.status === 401
-                    ) {
-                        if (checkLoginTimerId !== null) {
-                            clearTimeout(checkLoginTimerId);
-                        }
-                        loggedIn = false;
-                        if (onLoggedOut) {
-                            onLoggedOut();
-                        }
-                    }
-                })
-                .finally(() => {
-                    httpKeepAliveTimer = setTimeout(doKeepAlive, KEEP_ALIVE_PING_TIME);
-                });
-        } else {
-            httpKeepAliveTimer = setTimeout(doKeepAlive, KEEP_ALIVE_PING_TIME);
-        }
-    };
-
     /**
      * Call after external successful login
      */
-    const login = function () {
-        checkLogin();
+    const open = function (jwt, user_id) {
+        currentSession = openWebSocket(jwt, user_id);
+        lastUserAction = Date.now();
     };
 
-    const logout = function () {
+    const close = function () {
         if (currentSession != null) {
             currentSession.logoutSession();
             currentSession = null;
-        }
-    };
-
-    const checkLogin = function () {
-        options.get_status_func()
-            .then(({ data, version }) => {
-                if (onLogin) {
-                    onLogin(data, version);
-                }
-                loggedIn = true;
-                currentSession = openWebSocket(data.jwt, data.user_id);
-                lastUserAction = Date.now();
-            })
-            .catch((error) => {
-                if (
-                    error.response &&
-                    error.response.status &&
-                    error.response.status === 401
-                ) {
-                    loggedIn = false;
-                    if (onLoggedOut) {
-                        onLoggedOut();
-                    }
-                } else {
-                    // Try again after some time
-                    checkLoginTimerId = setTimeout(checkLogin, timeoutTime);
-                    if (timeoutTime <= 20000) {
-                        timeoutTime *= 2;
-                    }
-                }
-            });
-    };
-
-    const onCheckLoginCookie = function () {
-        if (loggedIn) {
-            // This particular routine closes this app if another app in the Aercon family
-            // on the same browser has logged out.
-            if (!options.check_cookie_func()) {
-                if (checkLoginTimerId !== null) {
-                    clearTimeout(checkLoginTimerId);
-                }
-                if (currentSession != null) {
-                    currentSession.logoutSession();
-                    currentSession = null;
-                }
-                loggedIn = false;
-                if (onLoggedOut) {
-                    onLoggedOut();
-                }
+        } else {
+            if (onConnect) {
+                onConnect(false);
             }
         }
-        setTimeout(onCheckLoginCookie, 500);
     };
 
     /**
      *
      * @param {string} topic
      * @param {any} payload
-     * @returns {Promise<{reason: number, error: string, sent: boolean}|{reason: string, sent: boolean}|{reason: string, data: UserProperties, reasonCode: *, error: (string|string[]|string), sent: boolean}>}
+     * @returns {
+     *    Promise<
+     *      {reason: number, error: string, sent: boolean}|
+     *      {reason: string, sent: boolean}|
+     *      {reason: string, data: UserProperties, reasonCode: *, error: (string|string[]|string), sent: boolean}
+     *   >}
      */
     const publish = async function (topic, payload) {
         if (client === null) {
@@ -600,7 +509,7 @@ const Connector = function (options) {
 
     /**
      *
-     * @param {('publish'|'connect'|'login'|'logged-out')} event
+     * @param {('publish'|'connect'|'login')} event
      * @param {function({Packet}|{boolean})} callback
      */
     const on = function (event, callback) {
@@ -611,22 +520,14 @@ const Connector = function (options) {
             case 'connect':
                 onConnect = callback;
                 break;
-            case 'login':
-                onLogin = callback;
-                break;
-            case 'logged-out':
-                onLoggedOut = callback;
-                break;
         }
     };
 
-    onCheckLoginCookie();
-    checkLogin();
     log('Starting connector for ' + clientId);
 
     return {
-        login,
-        logout,
+        open,
+        close,
         publish,
         subscribe,
         unSubscribe,
