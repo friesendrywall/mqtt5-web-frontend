@@ -5,6 +5,7 @@ import { v4 } from 'uuid';
 import websocket from 'websocket-stream';
 import mqttCon from 'mqtt-connection';
 import events from 'events';
+import qlobber from 'qlobber';
 
 const clientEvents = new events.EventEmitter();
 
@@ -68,6 +69,9 @@ const Connector = function (options) {
     };
 
     const mqtt_url = options && options.wss_url ? options.wss_url : '/api/wss/mqtt';
+    const server_ping = options && options.server_ping ? options.server_ping : false;
+    const conn_timeout = options && options.conn_timeout ? options.conn_timeout : 60000;
+    const keep_alive = options && options.keep_alive ? options.keep_alive : 30000;
 
     const getMqttError = function (err) {
         switch (err) {
@@ -140,7 +144,10 @@ const Connector = function (options) {
                 // No pending errors
             }
             log('MQTT closed:' + reason);
-            clearTimeout(mqttKeepAliveTimer);
+            if (mqttKeepAliveTimer) {
+                clearTimeout(mqttKeepAliveTimer);
+                mqttKeepAliveTimer = null;
+            }
 
             if (onConnect) {
                 onConnect(false);
@@ -160,7 +167,7 @@ const Connector = function (options) {
                 return;
             }
             client.pingreq(null, function () {
-                mqttKeepAliveTimer = setTimeout(mqttKeepAlive, 30000);
+                mqttKeepAliveTimer = setTimeout(mqttKeepAlive, keep_alive);
             });
         };
 
@@ -210,8 +217,10 @@ const Connector = function (options) {
                 log('connack', packet);
                 log('Already subscribed');
             }
-            updateConnTimer(60000);
-            mqttKeepAliveTimer = setTimeout(mqttKeepAlive, 10000);
+            updateConnTimer(conn_timeout);
+            if (!server_ping) {
+                mqttKeepAliveTimer = setTimeout(mqttKeepAlive, 10000);
+            }
             if (onConnect) {
                 onConnect(true);
             }
@@ -226,7 +235,7 @@ const Connector = function (options) {
                     messageId: packet.messageId
                 });
             }
-            updateConnTimer(60000);
+            updateConnTimer(conn_timeout);
             if (onPublish) {
                 onPublish(packet);
             }
@@ -287,8 +296,17 @@ const Connector = function (options) {
             if (closed) {
                 return;
             }
-            updateConnTimer(60000);
+            updateConnTimer(conn_timeout);
         });
+
+        client.on('pingreq', function () {
+            if (closed) {
+                return;
+            }
+            client.pingresp();
+            updateConnTimer(conn_timeout);
+        });
+
 
         client.on('close', function () {
             closeConnection('server closed');
